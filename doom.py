@@ -105,16 +105,16 @@ class Camera:
     def project_wall(self,player,wall,c=0):
         """Project a wall using Camera.project_point. Returns [a,b] the x positions of the wall's start and end, [c,d] the top and bottom y positions of the wall's start, and [e,f] the top and bottom y positions of the wall's end."""
 
-        def inner():
-            if y0 == 0:
-                y0 -= EPSILON
-            if y1 == 0:
-                y1 -= EPSILON
+        def inner(a,b):
+            if a == 0:
+                a -= EPSILON
+            if b == 0:
+                b -= EPSILON
 
-            r0 = (SCREEN_HEIGHT/2) + ((1 * SCREEN_HEIGHT) / (2 * y0))
-            r1 = (SCREEN_HEIGHT/2) - ((1 * SCREEN_HEIGHT) / (2 * y0))
-            r2 = (SCREEN_HEIGHT/2) + ((1 * SCREEN_HEIGHT) / (2 * y1))
-            r3 = (SCREEN_HEIGHT/2) - ((1 * SCREEN_HEIGHT) / (2 * y1))
+            r0 = (SCREEN_HEIGHT/2) + ((1 * SCREEN_HEIGHT) / (2 * a))
+            r1 = (SCREEN_HEIGHT/2) - ((1 * SCREEN_HEIGHT) / (2 * a))
+            r2 = (SCREEN_HEIGHT/2) + ((1 * SCREEN_HEIGHT) / (2 * b))
+            r3 = (SCREEN_HEIGHT/2) - ((1 * SCREEN_HEIGHT) / (2 * b))
 
             return r0,r1,r2,r3
 
@@ -138,12 +138,12 @@ class Camera:
                 x0,y0 = self.project_point(player,Linedef(wall.start, Point(nX, nY)).start)
                 x1,y1 = self.project_point(player,Linedef(wall.start, Point(nX, nY)).end)
             
-            r0,r1,r2,r3 = inner()
+            r0,r1,r2,r3 = inner(y0,y1)
             return x0,x1,r0,r1,r2,r3,y0-y1
             
 
         else:
-            r0,r1,r2,r3 = inner()
+            r0,r1,r2,r3 = inner(y0,y1)
             return x0,x1,r0,r1,r2,r3,y0-y1
 
     def draw_quad(self,x0,y0,x1,y1,x2,y2,x3,y3,color:Color):
@@ -168,17 +168,19 @@ class Camera:
 
     def draw_textured_quad(self,ttree:TextureTree,fileno,x0,x1,r0,r1,r2,r3):
         inverse = False
-        x0 = int(max(0,min(SCREEN_WIDTH,x0)))
-        x1 = int(max(0,min(SCREEN_WIDTH,x1)))
+        rr0 = r2-r0
+        rr1 = r3-r1
         if x0 == x1: return
         if x0 > x1: 
             x0, x1 = x1, x0
             inverse = True
-        for i in range(int(x0),int(x1)+1):
+        for i in range(max(int(x0),0),min(int(x1+1),SCREEN_WIDTH)):
+            if i > SCREEN_WIDTH or i < 0: continue
             t = (i-x0) / (x1-x0)
+            t = min(1.0,max(0.0,t))
             px = (t*128) % 128
-            y0 = r0 + t * (r2 - r0)
-            y1 = r1 + t * (r3 - r1)
+            y0 = r0 + t * rr0
+            y1 = r1 + t * rr1
             y0 = int(max(0,min(SCREEN_HEIGHT,y0)))
             y1 = int(max(0,min(SCREEN_HEIGHT,y1)))
             if y1 - y0 == 0:
@@ -451,16 +453,35 @@ def splitdiv_linedef(case,partition):
 
     return split_a, split_b
 
+def find_partition(linedefs):
+    best = None
+    max_splits = 10000
+
+    for candidate in linedefs:
+        splits = 0
+
+        for test in linedefs:
+            if test == candidate: continue
+            if getdiv_linedef(test,candidate) == "span": splits += 1
+
+        if splits <= max_splits:
+            max_splits = splits
+            best = candidate
+            if splits == 0:
+                break
+
+    return best
+
 def build_bsp(linedefs):
     if not linedefs:
         return
     
-    partition = linedefs[0] # TEST CASE - THIS SHOULD BE REPLACED FOR OPTIMAL PERFORMANCE AND SIMPLICITY
+    partition = find_partition(linedefs) #linedefs[0] # TEST CASE - THIS SHOULD BE REPLACED FOR OPTIMAL PERFORMANCE AND SIMPLICITY
     front_division = []
     back_division = []
     on_division = []
 
-    for line in linedefs[1:]:
+    for line in linedefs:
         div = getdiv_linedef(line,partition)
         if div=="back": back_division.append(line)
         elif div=="front": front_division.append(line)
@@ -487,13 +508,13 @@ def render_bsp(node,player):
     mid = ((node.partition.start.x + node.partition.end.x) / 2, (node.partition.start.y + node.partition.end.y) / 2)
     div = getdiv_linedef(Linedef((player.x,player.y),mid),node.partition)
     if div == "front" or div == "span" or div == "on": # front / span / on
-        render_bsp(node.right,player)
-        draw_wrapper(node.segments)
         render_bsp(node.left,player)
+        draw_wrapper(node.segments)
+        render_bsp(node.right,player)
     elif div == "back": # behind
-        render_bsp(node.left,player)
-        draw_wrapper(node.segments)
         render_bsp(node.right,player)
+        draw_wrapper(node.segments)
+        render_bsp(node.left,player)
 
 
 tree = TextureTree()
