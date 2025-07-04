@@ -181,13 +181,11 @@ class Camera:
             px = (t*128) % 128
             y0 = r0 + t * rr0
             y1 = r1 + t * rr1
-            y0 = int(max(0,min(SCREEN_HEIGHT,y0)))
-            y1 = int(max(0,min(SCREEN_HEIGHT,y1)))
             if y1 - y0 == 0:
                 continue
             if y0 > y1:
                 y0,y1 = y1,y0
-            for j in range(int(y0),int(y1)+1):
+            for j in range(max(int(y0),0),min(int(y1+1),SCREEN_WIDTH)):
                 v = (j-y0) / (y1-y0)
                 if inverse:
                     v = 1-v
